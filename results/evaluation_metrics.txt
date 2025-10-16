@@ -1,0 +1,48 @@
+
+Drone 1 Metrics:
+Mean Error: 0.121 meters
+Median Error: 0.103 meters
+Error Std Dev: 0.169 meters
+
+Success Rates:
+@ 0.1m: 48.0%
+@ 0.2m: 91.2%
+@ 0.5m: 99.6%
+@ 1.0m: 99.6%
+@ 2.0m: 99.6%
+
+Drone 2 Metrics:
+Mean Error: 0.132 meters
+Median Error: 0.099 meters
+Error Std Dev: 0.137 meters
+
+Success Rates:
+@ 0.1m: 50.4%
+@ 0.2m: 86.0%
+@ 0.5m: 98.0%
+@ 1.0m: 99.2%
+@ 2.0m: 100.0%
+
+Drone 3 Metrics:
+Mean Error: 0.087 meters
+Median Error: 0.067 meters
+Error Std Dev: 0.085 meters
+
+Success Rates:
+@ 0.1m: 72.4%
+@ 0.2m: 95.6%
+@ 0.5m: 99.6%
+@ 1.0m: 99.6%
+@ 2.0m: 100.0%
+
+Drone 4 Metrics:
+Mean Error: 0.095 meters
+Median Error: 0.076 meters
+Error Std Dev: 0.095 meters
+
+Success Rates:
+@ 0.1m: 71.6%
+@ 0.2m: 95.6%
+@ 0.5m: 99.2%
+@ 1.0m: 99.6%
+@ 2.0m: 100.0%
