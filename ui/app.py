@@ -48,84 +48,114 @@ def main():
         with torch.no_grad():
             preds = model(img_tensor)[0]  # [4, 3]
 
-        # Display input image and predictions side by side
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            st.image(img, caption="Input Image", use_container_width=True)
-            
-            # Detailed position table
-            st.subheader("Drone Positions")
-            results = []
-            for i, pred in enumerate(preds):
-                results.append({
-                    "Drone": f"Drone {i+1}",
-                    "X (m)": f"{pred[0]:.2f}",
-                    "Y (m)": f"{pred[1]:.2f}", 
-                    "Z (m)": f"{pred[2]:.2f}",
-                    "Height": f"{abs(pred[2]):.2f}m",
-                    "Distance": f"{np.sqrt(pred[0]**2 + pred[1]**2):.2f}m"
-                })
-            st.table(results)
+        # Display results
+        st.image(img, caption="Input Image", use_column_width=True)
 
-        with col2:
-            # Plot top-down view
-            st.subheader("Top-Down View")
-            fig1, ax1 = plt.subplots(figsize=(8, 8))
-            colors = ['r', 'g', 'b', 'y']
-            
-            # Draw coordinate grid
-            ax1.grid(True, linestyle='--', alpha=0.6)
-            ax1.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-            ax1.axvline(x=0, color='k', linestyle='-', alpha=0.3)
-            
-            # Plot drones with numbers
-            for i, pred in enumerate(preds):
-                ax1.scatter(pred[0], pred[1], c=colors[i], s=100, label=f'Drone {i+1}')
-                ax1.annotate(f'D{i+1}', (pred[0], pred[1]), 
-                           xytext=(5, 5), textcoords='offset points')
-            
-            ax1.set_xlabel('X Position (m)')
-            ax1.set_ylabel('Y Position (m)')
-            ax1.set_title('Drone Positions (Top View)')
-            ax1.legend()
-            st.pyplot(fig1)
+        # Split predictions into position and orientation
+        positions = preds[:, :3]  # [4, 3]
+        quaternions = preds[:, 3:]  # [4, 4]
 
-        # 3D visualization
-        st.subheader("3D View")
-        fig2 = plt.figure(figsize=(10, 8))
-        ax2 = fig2.add_subplot(111, projection='3d')
-        
-        # Plot drones in 3D
-        for i, pred in enumerate(preds):
-            ax2.scatter(pred[0], pred[1], pred[2], c=colors[i], s=100, label=f'Drone {i+1}')
-            # Draw vertical lines to ground
-            ax2.plot([pred[0], pred[0]], [pred[1], pred[1]], [0, pred[2]], 
-                    c=colors[i], linestyle='--', alpha=0.5)
+        # Convert quaternions to Euler angles for visualization
+        def quaternion_to_euler(q):
+            # q = [qx, qy, qz, qw]
+            qx, qy, qz, qw = q
             
+            # Roll (x-axis rotation)
+            sinr_cosp = 2 * (qw * qx + qy * qz)
+            cosr_cosp = 1 - 2 * (qx * qx + qy * qy)
+            roll = np.arctan2(sinr_cosp, cosr_cosp)
+            
+            # Pitch (y-axis rotation)
+            sinp = 2 * (qw * qy - qz * qx)
+            pitch = np.arcsin(sinp)
+            
+            # Yaw (z-axis rotation)
+            siny_cosp = 2 * (qw * qz + qx * qy)
+            cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+            yaw = np.arctan2(siny_cosp, cosy_cosp)
+            
+            return np.array([roll, pitch, yaw]) * 180.0 / np.pi  # Convert to degrees
+
+        # Show predictions in table
+        results = []
+        for i, (pos, quat) in enumerate(zip(positions, quaternions)):
+            euler = quaternion_to_euler(quat)
+            results.append({
+                "Drone": f"Drone {i+1}",
+                "X (m)": f"{pos[0]:.2f}",
+                "Y (m)": f"{pos[1]:.2f}", 
+                "Z (m)": f"{pos[2]:.2f}",
+                "Roll (°)": f"{euler[0]:.1f}",
+                "Pitch (°)": f"{euler[1]:.1f}",
+                "Yaw (°)": f"{euler[2]:.1f}"
+            })
+        st.table(results)
+
+        # Create 3D plot with pose visualization
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        colors = ['r', 'g', 'b', 'y']
+        arrow_length = 0.5  # Length of orientation arrows
+        
+        for i, (pos, quat) in enumerate(zip(positions, quaternions)):
+            # Plot drone position
+            ax.scatter(pos[0], pos[1], pos[2], c=colors[i], s=100, label=f'Drone {i+1}')
+            
+            # Calculate orientation vectors using quaternion
+            def quat_rotate(q, v):
+                qx, qy, qz, qw = q
+                x, y, z = v
+                
+                # Apply quaternion rotation
+                wx = qw * x + qy * z - qz * y
+                wy = qw * y + qz * x - qx * z
+                wz = qw * z + qx * y - qy * x
+                
+                xx = qx * x + qy * y + qz * z
+                
+                return np.array([
+                    2 * (xx * qx + wx * qw - wy * qz + wz * qy),
+                    2 * (xx * qy + wy * qw - wz * qx + wx * qz),
+                    2 * (xx * qz + wz * qw - wx * qy + wy * qx)
+                ])
+            
+            # Draw orientation arrows
+            forward = quat_rotate(quat, [arrow_length, 0, 0])
+            up = quat_rotate(quat, [0, 0, arrow_length])
+            
+            # Plot orientation vectors
+            ax.quiver(pos[0], pos[1], pos[2], 
+                     forward[0], forward[1], forward[2],
+                     colors[i], alpha=0.6)
+            ax.quiver(pos[0], pos[1], pos[2], 
+                     up[0], up[1], up[2],
+                     colors[i], alpha=0.3)
+        
         # Set labels and title
-        ax2.set_xlabel('X Position (m)')
-        ax2.set_ylabel('Y Position (m)')
-        ax2.set_zlabel('Height (m)')
-        ax2.set_title('Drone Positions (3D View)')
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_zlabel('Z (m)')
+        ax.set_title('Estimated Drone Poses (3D View)')
+        ax.legend()
         
-        # Add ground plane grid
-        x_range = np.array([min(preds[:,0]), max(preds[:,0])])
-        y_range = np.array([min(preds[:,1]), max(preds[:,1])])
-        margin = 1.0  # Add 1m margin
-        x_grid, y_grid = np.meshgrid(
-            np.linspace(x_range.min() - margin, x_range.max() + margin, 10),
-            np.linspace(y_range.min() - margin, y_range.max() + margin, 10)
-        )
-        z_grid = np.zeros_like(x_grid)
-        ax2.plot_surface(x_grid, y_grid, z_grid, alpha=0.1, color='gray')
+        # Auto-scale axes
+        positions = positions.numpy()
+        max_range = np.array([
+            positions[:,0].max() - positions[:,0].min(),
+            positions[:,1].max() - positions[:,1].min(),
+            positions[:,2].max() - positions[:,2].min()
+        ]).max() / 2.0
         
-        ax2.legend()
-        ax2.grid(True)
+        mid_x = (positions[:,0].max() + positions[:,0].min()) * 0.5
+        mid_y = (positions[:,1].max() + positions[:,1].min()) * 0.5
+        mid_z = (positions[:,2].max() + positions[:,2].min()) * 0.5
         
-        # Adjust 3D view angle
-        ax2.view_init(elev=20, azim=45)
-        st.pyplot(fig2)
+        ax.set_xlim(mid_x - max_range, mid_x + max_range)
+        ax.set_ylim(mid_y - max_range, mid_y + max_range)
+        ax.set_zlim(mid_z - max_range, mid_z + max_range)
+        
+        st.pyplot(fig)
     
     except Exception as e:
         st.error(f"Error processing image: {str(e)}")

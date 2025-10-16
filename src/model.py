@@ -9,17 +9,27 @@ class SingleCamMultiDronePoseNet(torch.nn.Module):
         backbone.fc = torch.nn.Identity()
         self.backbone = backbone
             
-        # MLP head for 4 drone positions
+        # MLP head for 4 drone poses (position + orientation)
         self.pose_head = torch.nn.Sequential(
             torch.nn.Linear(512, 256),
             torch.nn.ReLU(),
             torch.nn.Linear(256, 128),
             torch.nn.ReLU(),
-            torch.nn.Linear(128, 12)  # 4 drones x (x,y,z) position
+            torch.nn.Linear(128, 28)  # 4 drones x (x,y,z, qx,qy,qz,qw)
         )
         
     def forward(self, x):
         # x: batch of images [B, C, H, W]
         features = self.backbone(x)  # [B, 512]
-        poses = self.pose_head(features)  # [B, 12]
-        return poses.view(-1, 4, 3)  # reshape to [B, 4, 3] for 4 drones
+        poses = self.pose_head(features)  # [B, 28]
+        
+        # Split into position and orientation
+        B = poses.shape[0]
+        poses = poses.view(B, 4, 7)  # [B, 4, 7] for 4 drones (xyz + quaternion)
+        
+        # Normalize quaternions
+        pos = poses[..., :3]  # [B, 4, 3]
+        quat = poses[..., 3:]  # [B, 4, 4]
+        quat = torch.nn.functional.normalize(quat, p=2, dim=-1)  # ensure unit quaternions
+        
+        return torch.cat([pos, quat], dim=-1)  # [B, 4, 7]
